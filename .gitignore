@@ -1,0 +1,7 @@
+Include/
+Lib/
+node_modules/
+Scripts/
+__pycache__/
+
+*.log
