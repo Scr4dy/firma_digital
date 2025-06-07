@@ -85,7 +85,7 @@
         loginMsg.classList.add("text-green-600");
         loginMsg.textContent = "Autenticación exitosa. Redirigiendo...";
         setTimeout(() => {
-          window.location.href = `/documentos?rfc=${encodeURIComponent(rfc)}`;
+          window.location.href = `/documentos`;
         }, 1500);
       } else {
         loginMsg.classList.remove("text-green-600");

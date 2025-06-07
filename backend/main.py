@@ -1,21 +1,18 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, Cookie, Form
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from fastapi import UploadFile, Form
-from fastapi.responses import JSONResponse
-from fastapi.responses import RedirectResponse
 
-from datetime import datetime
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.x509 import load_pem_x509_certificate
+
 from pathlib import Path
+from datetime import datetime
 
 import zipfile
-import io
 import json
 import bcrypt
 
@@ -31,13 +28,15 @@ templates = Jinja2Templates(directory=str(BASE_DIR.parent / "frontend"))
 SIGNED_PDF_DIR = BASE_DIR / "signed_pdfs"
 SIGNED_PDF_DIR.mkdir(exist_ok=True)
 
+# Ruta de eFirmas
 EFIRMAS_DIR = BASE_DIR / "efirmas"
 EFIRMAS_DIR.mkdir(exist_ok=True)
 
+# Ruta de usuarios
 USUARIOS_DIR = BASE_DIR / "usuarios"
 USUARIOS_DIR.mkdir(exist_ok=True)
 
-# Monta carpetas estáticas
+# Montar directorios estáticos
 app.mount("/frontend", StaticFiles(directory=BASE_DIR.parent / "frontend"), name="frontend")
 app.mount("/signed_pdfs", StaticFiles(directory=SIGNED_PDF_DIR), name="signed_pdfs")
 app.mount("/efirmas", StaticFiles(directory=EFIRMAS_DIR), name="efirmas")
@@ -47,16 +46,18 @@ def root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/documentos", response_class=HTMLResponse)
-def ver_documentos(request: Request, rfc: str = "usuario123"):
-    """Carga los documentos firmados para el RFC proporcionado"""
-    user_dir = SIGNED_PDF_DIR / rfc
+def ver_documentos(request: Request, session_rfc: str = Cookie(default=None)):
+    if not session_rfc:
+        return RedirectResponse(url="/", status_code=303)
+
+    user_dir = SIGNED_PDF_DIR / session_rfc
     user_dir.mkdir(parents=True, exist_ok=True)
 
     archivos = [
-        {"nombre": f.name, "ruta": f"/signed_pdfs/{rfc}/{f.name}"}
+        {"nombre": f.name, "ruta": f"/signed_pdfs/{session_rfc}/{f.name}"}
         for f in user_dir.glob("*.pdf")
     ]
-    return templates.TemplateResponse("documento.html", {"request": request, "archivos": archivos, "rfc": rfc})
+    return templates.TemplateResponse("components/documento.html", {"request": request, "archivos": archivos, "rfc": session_rfc})
 
 @app.post("/auth/login")
 async def login(
@@ -110,7 +111,10 @@ async def login(
     except Exception as e:
         return JSONResponse(status_code=400, content={"mensaje": "Error al verificar el certificado."})
 
-    return JSONResponse(status_code=200, content={"mensaje": f"Autenticación exitosa para {rfc}."})
+    response = JSONResponse(status_code=200, content={"mensaje": f"Autenticación exitosa para {rfc}."})
+    response.set_cookie(key="session_rfc", value=rfc, httponly=True)
+    return response
+
 
 @app.get("/descargar/{rfc}/{archivo}", response_class=FileResponse)
 def descargar_pdf(rfc: str, archivo: str):
@@ -213,3 +217,9 @@ def generar_firma_digital(
         "descarga_zip": f"/efirmas/{rfc}/{rfc}_firma.zip",
         "volver_inicio": True
     })
+
+@app.get("/logout")
+def logout():
+    response = RedirectResponse(url="/", status_code=303)
+    response.delete_cookie("session_rfc")
+    return response

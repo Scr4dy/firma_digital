@@ -13,9 +13,12 @@
   <div class="w-full max-w-5xl bg-white p-8 rounded-xl shadow-xl">
     <h1 class="text-3xl font-bold text-blue-700 mb-6 text-center">Mis Documentos Firmados</h1>
 
+    <div class="text-right mb-4">
+      <a href="/logout" class="text-sm text-red-600 hover:underline font-medium">Cerrar sesión</a>
+    </div>
+
     <!-- 🔹 Formulario para subir PDF -->
-    <form action="/subir_pdf" method="post" enctype="multipart/form-data"
-      class="mb-8 bg-gray-50 p-4 rounded-lg shadow space-y-4">
+    <form id="form-subir-pdf" enctype="multipart/form-data" class="mb-8 bg-gray-50 p-4 rounded-lg shadow space-y-4">
       <input type="hidden" name="rfc" value="{{ rfc }}">
       <div>
         <label class="block text-sm font-medium text-gray-700">Selecciona PDF firmado:</label>
@@ -24,6 +27,7 @@
       <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
         Subir PDF
       </button>
+      <div id="pdf-msg" class="text-center text-sm mt-2 text-green-600"></div>
     </form>
 
     <!-- 🔹 Lista de documentos -->
@@ -73,6 +77,39 @@
         alert("No se pudo cargar el PDF: " + err.message);
       });
     }
+    document.getElementById("form-subir-pdf").addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const form = e.target;
+      const formData = new FormData(form);
+      const mensajeEl = document.getElementById("pdf-msg");
+
+      try {
+        const response = await fetch("/subir_pdf", {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          mensajeEl.classList.remove("text-red-600");
+          mensajeEl.classList.add("text-green-600");
+          mensajeEl.textContent = `${data.mensaje}: ${data.archivo}`;
+
+          // Opcional: Recargar la página después de subir
+          setTimeout(() => window.location.reload(), 1500);
+        } else {
+          mensajeEl.classList.remove("text-green-600");
+          mensajeEl.classList.add("text-red-600");
+          mensajeEl.textContent = data.mensaje || "Error al subir el PDF.";
+        }
+      } catch (err) {
+        mensajeEl.classList.remove("text-green-600");
+        mensajeEl.classList.add("text-red-600");
+        mensajeEl.textContent = "Error de red. Intenta nuevamente.";
+      }
+    });
   </script>
 
 </body>
