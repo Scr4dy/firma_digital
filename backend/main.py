@@ -11,8 +11,13 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography import x509
 from cryptography.x509.oid import NameOID
+from cryptography.x509 import load_pem_x509_certificate
 from pathlib import Path
 
+import zipfile
+import io
+import json
+import bcrypt
 
 app = FastAPI()
 
@@ -29,6 +34,8 @@ SIGNED_PDF_DIR.mkdir(exist_ok=True)
 EFIRMAS_DIR = BASE_DIR / "efirmas"
 EFIRMAS_DIR.mkdir(exist_ok=True)
 
+USUARIOS_DIR = BASE_DIR / "usuarios"
+USUARIOS_DIR.mkdir(exist_ok=True)
 
 # Monta carpetas estáticas
 app.mount("/frontend", StaticFiles(directory=BASE_DIR.parent / "frontend"), name="frontend")
@@ -50,6 +57,60 @@ def ver_documentos(request: Request, rfc: str = "usuario123"):
         for f in user_dir.glob("*.pdf")
     ]
     return templates.TemplateResponse("documento.html", {"request": request, "archivos": archivos, "rfc": rfc})
+
+@app.post("/auth/login")
+async def login(
+    rfc: str = Form(...),
+    cer_file: UploadFile = Form(...),
+    key_file: UploadFile = Form(...),
+    password: str = Form(...)
+):
+    # Validar existencia del usuario
+    user_file = USUARIOS_DIR / f"{rfc}.json"
+    if not user_file.exists():
+        return JSONResponse(status_code=401, content={"mensaje": "Usuario no registrado."})
+
+    with open(user_file, "r", encoding="utf-8") as f:
+        user_data = json.load(f)
+
+    # Validar contraseña
+    if not bcrypt.checkpw(password.encode(), user_data["password_hash"].encode()):
+        return JSONResponse(status_code=401, content={"mensaje": "Contraseña incorrecta."})
+
+    # Guardar archivos temporales
+    temp_dir = BASE_DIR / "temp"
+    temp_dir.mkdir(exist_ok=True)
+    cer_path = temp_dir / f"{rfc}.cer"
+    key_path = temp_dir / f"{rfc}.key"
+
+    with open(cer_path, "wb") as f:
+        f.write(await cer_file.read())
+    with open(key_path, "wb") as f:
+        f.write(await key_file.read())
+
+    # Validar que la clave privada puede abrirse con la contraseña
+    try:
+        with open(key_path, "rb") as key_file_obj:
+            private_key = serialization.load_pem_private_key(
+                key_file_obj.read(),
+                password=password.encode()
+            )
+    except Exception as e:
+        return JSONResponse(status_code=401, content={"mensaje": f"Clave privada inválida o contraseña incorrecta."})
+
+    # (Opcional) Validar que el .key coincide con el certificado
+    try:
+        with open(cer_path, "rb") as cert_file_obj:
+            cert = load_pem_x509_certificate(cert_file_obj.read())
+            public_key = cert.public_key()
+
+        # Validar que ambas claves coinciden
+        if public_key.public_numbers() != private_key.public_key().public_numbers(): # type: ignore
+            return JSONResponse(status_code=401, content={"mensaje": "El certificado no corresponde con la clave privada."})
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"mensaje": "Error al verificar el certificado."})
+
+    return JSONResponse(status_code=200, content={"mensaje": f"Autenticación exitosa para {rfc}."})
 
 @app.get("/descargar/{rfc}/{archivo}", response_class=FileResponse)
 def descargar_pdf(rfc: str, archivo: str):
@@ -83,7 +144,8 @@ def generar_firma_digital(
     nombre: str = Form(...),
     apellidos: str = Form(...),
     fecha_nac: str = Form(...),
-    correo: str = Form(...)
+    correo: str = Form(...),
+    password: str = Form(...)
 ):
     # Generar RFC ficticio
     iniciales = (apellidos[:2] + nombre[0]).upper()
@@ -101,7 +163,7 @@ def generar_firma_digital(
         f.write(key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption()
+            encryption_algorithm=serialization.BestAvailableEncryption(password.encode())
         ))
 
     # Generar certificado autofirmado
@@ -123,12 +185,31 @@ def generar_firma_digital(
     with open(cert_path, "wb") as f:
         f.write(cert.public_bytes(serialization.Encoding.PEM))
 
-    # Mostrar RFC generado y enlaces de descarga
+    zip_path = rfc_dir / f"{rfc}_firma.zip"
+    with zipfile.ZipFile(zip_path, 'w') as zipf:
+        zipf.write(key_path, arcname=f"{rfc}.key")
+        zipf.write(cert_path, arcname=f"{rfc}.cer")
+
+    # Encriptar la contraseña
+    hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+    # Guardar info del usuario
+    registro = {
+        "rfc": rfc,
+        "nombre": nombre,
+        "apellidos": apellidos,
+        "correo": correo,
+        "password_hash": hashed_password
+    }
+
+    with open(USUARIOS_DIR / f"{rfc}.json", "w", encoding="utf-8") as f:
+        json.dump(registro, f, indent=2, ensure_ascii=False)
+
     return templates.TemplateResponse("components/registro_firma.html", {
         "request": request,
         "mensaje": f"RFC generado exitosamente: {rfc}",
         "descarga_key": f"/efirmas/{rfc}/{rfc}.key",
         "descarga_cer": f"/efirmas/{rfc}/{rfc}.cer",
+        "descarga_zip": f"/efirmas/{rfc}/{rfc}_firma.zip",
         "volver_inicio": True
     })
-    

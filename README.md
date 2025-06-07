@@ -20,14 +20,19 @@ pip install -r requirements.txt
 ```
 
 
-# Paquete de desarrollo Frontend (Opcional)
+# Paquete de desarrollo con Node.js
 
 ### Instalación de paquetes
 ```
 npm install
 ```
 
-### Ejecución de TailwindCSS
+### Ejecución de TailwindCSS (Opcional)
 ```
 npx @tailwindcss/cli -i ./frontend/styles/input.css -o ./frontend/styles/index.css --watch
+```
+
+# Ejecución de servidor
+```
+fastapi dev .\backend\main.py
 ```

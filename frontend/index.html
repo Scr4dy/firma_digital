@@ -17,7 +17,7 @@
       <p class="text-gray-500 text-sm mt-2">Accede de forma segura a tus documentos</p>
     </div>
 
-    <form action="/auth/login" method="POST" enctype="multipart/form-data" class="space-y-6">
+    <form id="form-login" enctype="multipart/form-data" class="space-y-6">
       <div>
         <label for="rfc" class="block text-sm font-medium text-gray-700">RFC</label>
         <input type="text" id="rfc" name="rfc" required
@@ -43,6 +43,7 @@
       </div>
 
       <!-- Google reCAPTCHA puede integrarse aquí -->
+      <div id="login-msg" class="text-center text-sm mt-2 text-red-600"></div>
 
       <button type="submit"
         class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition">
@@ -62,5 +63,38 @@
     </p>
   </div>
 </body>
+<script>
+  document.getElementById("form-login").addEventListener("submit", async function (e) {
+    e.preventDefault();
 
+    const form = e.target;
+    const formData = new FormData(form);
+    const rfc = formData.get("rfc");
+    const loginMsg = document.getElementById("login-msg");
+
+    try {
+      const response = await fetch("/auth/login", {
+        method: "POST",
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        loginMsg.classList.remove("text-red-600");
+        loginMsg.classList.add("text-green-600");
+        loginMsg.textContent = "Autenticación exitosa. Redirigiendo...";
+        setTimeout(() => {
+          window.location.href = `/documentos?rfc=${encodeURIComponent(rfc)}`;
+        }, 1500);
+      } else {
+        loginMsg.classList.remove("text-green-600");
+        loginMsg.classList.add("text-red-600");
+        loginMsg.textContent = data.mensaje || "Error de autenticación.";
+      }
+    } catch (err) {
+      loginMsg.textContent = "Error de red. Intenta de nuevo.";
+    }
+  });
+</script>
 </html>
