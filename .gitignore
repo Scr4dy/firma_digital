@@ -6,3 +6,7 @@ __pycache__/
 
 *.log
 .env
+
+*.key
+*.cer
+*.pdf
