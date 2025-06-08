@@ -29,7 +29,7 @@ npm install
 
 ### Ejecución de TailwindCSS (Opcional)
 ```
-npx @tailwindcss/cli -i ./frontend/styles/input.css -o ./frontend/styles/index.css --watch
+npx @tailwindcss/cli -i ./frontend/styles/input.css -o ./frontend/styles/styles.css --watch
 ```
 
 # Ejecución de servidor

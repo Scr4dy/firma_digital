@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, UploadFile, Cookie, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -11,12 +12,21 @@ from cryptography.x509 import load_pem_x509_certificate
 
 from pathlib import Path
 from datetime import datetime
+from dotenv import load_dotenv
 
 import zipfile
 import json
 import bcrypt
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # BASE_DIR apunta ahora a la carpeta 'backend'
 BASE_DIR = Path(__file__).resolve().parent
@@ -35,6 +45,10 @@ EFIRMAS_DIR.mkdir(exist_ok=True)
 # Ruta de usuarios
 USUARIOS_DIR = BASE_DIR / "usuarios"
 USUARIOS_DIR.mkdir(exist_ok=True)
+
+# Cargar archivo .env
+env_path = Path(__file__).parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 # Montar directorios estáticos
 app.mount("/frontend", StaticFiles(directory=BASE_DIR.parent / "frontend"), name="frontend")
@@ -64,8 +78,9 @@ async def login(
     rfc: str = Form(...),
     cer_file: UploadFile = Form(...),
     key_file: UploadFile = Form(...),
-    password: str = Form(...)
+    password: str = Form(...),
 ):
+    
     # Validar existencia del usuario
     user_file = USUARIOS_DIR / f"{rfc}.json"
     if not user_file.exists():

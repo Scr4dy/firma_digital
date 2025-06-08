@@ -5,7 +5,11 @@
   <meta charset="UTF-8">
   <title>Documentos Firmados</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link href="/frontend/styles/styles.css" rel="stylesheet">
+  <link href="/frontend/styles/documentos.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  </script>
 </head>
 
 <body class="bg-gray-100 min-h-screen flex flex-col items-center py-10">
@@ -39,7 +43,8 @@
           <p class="text-sm text-gray-500">RFC: {{ rfc }}</p>
         </div>
         <div class="mt-4 flex justify-between items-center">
-          <button onclick="verPDF('{{ doc.ruta }}')" class="text-blue-600 hover:underline text-sm font-medium">
+          <button onclick="verPDF('/signed_pdfs/{{ rfc }}/{{ doc.nombre }}')"
+            class="text-blue-600 hover:underline text-sm font-medium">
             Ver documento
           </button>
           <a href="/descargar/{{ rfc }}/{{ doc.nombre }}"
@@ -58,60 +63,104 @@
     </div>
   </div>
 
-  <script>
-    function verPDF(pdfUrl) {
-      const visorContainer = document.getElementById('visor-container');
-      const canvas = document.getElementById('visor-pdf');
-      const ctx = canvas.getContext('2d');
-      visorContainer.classList.remove('hidden');
-
-      const loadingTask = pdfjsLib.getDocument(pdfUrl);
-      loadingTask.promise.then(pdf => {
-        pdf.getPage(1).then(page => {
-          const viewport = page.getViewport({ scale: 1.5 });
-          canvas.height = viewport.height;
-          canvas.width = viewport.width;
-          page.render({ canvasContext: ctx, viewport });
-        });
-      }).catch(err => {
-        alert("No se pudo cargar el PDF: " + err.message);
-      });
-    }
-    document.getElementById("form-subir-pdf").addEventListener("submit", async function (e) {
-      e.preventDefault();
-
-      const form = e.target;
-      const formData = new FormData(form);
-      const mensajeEl = document.getElementById("pdf-msg");
-
-      try {
-        const response = await fetch("/subir_pdf", {
-          method: "POST",
-          body: formData
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          mensajeEl.classList.remove("text-red-600");
-          mensajeEl.classList.add("text-green-600");
-          mensajeEl.textContent = `${data.mensaje}: ${data.archivo}`;
-
-          // Opcional: Recargar la página después de subir
-          setTimeout(() => window.location.reload(), 1500);
-        } else {
-          mensajeEl.classList.remove("text-green-600");
-          mensajeEl.classList.add("text-red-600");
-          mensajeEl.textContent = data.mensaje || "Error al subir el PDF.";
-        }
-      } catch (err) {
-        mensajeEl.classList.remove("text-green-600");
-        mensajeEl.classList.add("text-red-600");
-        mensajeEl.textContent = "Error de red. Intenta nuevamente.";
-      }
-    });
-  </script>
-
+  <button id="btn-ir-arriba"
+    style="position: fixed; top: 20px; right: 20px; padding: 8px 12px; background-color: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 9999; display: none;">
+    ↑ Ir arriba
+  </button>
 </body>
 
+<script>
+  function verPDF(pdfUrl) {
+    const visorContainer = document.getElementById('visor-container');
+
+    // Limpiar el contenido previo
+    visorContainer.innerHTML = `
+      <h3 class="text-xl font-semibold text-gray-700 mb-3">Visualizador de PDF</h3>
+    `;
+
+    // Mostrar contenedor
+    visorContainer.classList.remove('hidden');
+
+    // Cargar el PDF
+    const loadingTask = pdfjsLib.getDocument({ url: pdfUrl });
+    loadingTask.promise.then(pdf => {
+      const totalPages = pdf.numPages;
+
+      // Renderizar todas las páginas
+      for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+        pdf.getPage(pageNum).then(page => {
+          const viewport = page.getViewport({ scale: 1.5 });
+
+          // Crear canvas por página
+          const canvas = document.createElement('canvas');
+          canvas.className = "w-full border rounded shadow-md my-4";
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+          visorContainer.appendChild(canvas);
+
+          const context = canvas.getContext('2d');
+          const renderContext = {
+            canvasContext: context,
+            viewport: viewport
+          };
+
+          page.render(renderContext);
+        });
+      }
+    }).catch(err => {
+      alert("No se pudo cargar el PDF: " + err.message);
+      console.error(err);
+    });
+  }
+
+  document.getElementById("form-subir-pdf").addEventListener("submit", async function (e) {
+    e.preventDefault();
+
+    const form = e.target;
+    const formData = new FormData(form);
+    const mensajeEl = document.getElementById("pdf-msg");
+
+    try {
+      const response = await fetch("/subir_pdf", {
+        method: "POST",
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        mensajeEl.classList.remove("text-red-600");
+        mensajeEl.classList.add("text-green-600");
+        mensajeEl.textContent = `${data.mensaje}: ${data.archivo}`;
+
+        // Opcional: Recargar la página después de subir
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        mensajeEl.classList.remove("text-green-600");
+        mensajeEl.classList.add("text-red-600");
+        mensajeEl.textContent = data.mensaje || "Error al subir el PDF.";
+      }
+    } catch (err) {
+      mensajeEl.classList.remove("text-green-600");
+      mensajeEl.classList.add("text-red-600");
+      mensajeEl.textContent = "Error de red. Intenta nuevamente.";
+    }
+  });
+
+  const btnIrArriba = document.getElementById('btn-ir-arriba');
+
+  // Mostrar el botón cuando se baja 100px o más
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 100) {
+      btnIrArriba.style.display = 'block';
+    } else {
+      btnIrArriba.style.display = 'none';
+    }
+  });
+
+  // Al hacer clic, scroll suave hacia arriba
+  btnIrArriba.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+</script>
 </html>

@@ -12,7 +12,6 @@
   "type": "commonjs",
   "dependencies": {
     "@tailwindcss/cli": "^4.1.8",
-    "pdfjs-dist": "^5.3.31",
     "tailwindcss": "^4.1.8"
   }
 }
