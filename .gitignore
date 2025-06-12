@@ -12,3 +12,6 @@ __pycache__/
 *.pdf
 *.zip
 *.json
+
+pyenv.cfg
+input.css
