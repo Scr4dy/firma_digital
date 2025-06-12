@@ -10,6 +10,11 @@ from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.x509 import load_pem_x509_certificate
 
+from PyPDF2 import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from io import BytesIO
+
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
@@ -130,13 +135,43 @@ async def login(
     response.set_cookie(key="session_rfc", value=rfc, httponly=True)
     return response
 
+def generar_marca_agua(rfc: str) -> BytesIO:
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    c.setFont("Helvetica", 40)
+    c.setFillGray(0.5, 0.3)  # gris transparente
+    c.saveState()
+    c.translate(300, 400)
+    c.rotate(45)
+    c.drawCentredString(0, 0, f"RFC: {rfc}")
+    c.restoreState()
+    c.save()
+    buffer.seek(0)
+    return buffer
 
 @app.get("/descargar/{rfc}/{archivo}", response_class=FileResponse)
 def descargar_pdf(rfc: str, archivo: str):
-    ruta = SIGNED_PDF_DIR / rfc / archivo
-    if ruta.exists():
-        return FileResponse(ruta, filename=archivo, media_type='application/pdf')
-    return HTMLResponse("<h2>Archivo no encontrado</h2>", status_code=404)
+    original_path = SIGNED_PDF_DIR / rfc / archivo
+    if not original_path.exists():
+        return HTMLResponse("<h2>Archivo no encontrado</h2>", status_code=404)
+
+    # Leer PDF original y marca de agua
+    marca = PdfReader(generar_marca_agua(rfc))
+    original = PdfReader(str(original_path))
+    salida = PdfWriter()
+
+    marca_pagina = marca.pages[0]
+    for pagina in original.pages:
+        pagina.merge_page(marca_pagina)
+        salida.add_page(pagina)
+
+    # Crear PDF temporal
+    salida_path = BASE_DIR / "temp" / f"{rfc}_marcado.pdf"
+    salida_path.parent.mkdir(exist_ok=True)
+    with open(salida_path, "wb") as f_out:
+        salida.write(f_out)
+
+    return FileResponse(salida_path, filename=archivo, media_type='application/pdf')
 
 @app.post("/subir_pdf")
 async def subir_pdf(rfc: str = Form(...), archivo: UploadFile = Form(...)):
